@@ -267,7 +267,7 @@ export const PERSONA_TOOL_REGISTRY: PersonaToolAccess[] = [
       TOOL_CATALOG.find((t) => t.tool === 'vpa_pipeline')!,
       TOOL_CATALOG.find((t) => t.tool === 'vpa_metrics_dashboard')!,
     ],
-    restrictedTools: ['vpa_email', 'vpa_content', 'vpa_social', 'vpa_images'] as VPAToolName[],
+    restrictedTools: ['vpa_email', 'vpa_content', 'vpa_social', 'vpa_images'] as any[],
   },
   {
     personaId: 'cmo',
@@ -287,7 +287,7 @@ export const PERSONA_TOOL_REGISTRY: PersonaToolAccess[] = [
       ...MARKETING_TOOLS,
       CLIENT_TOOLS[3], // Reputation tool
     ],
-    restrictedTools: ['vpa_bookkeeping', 'vpa_time_billing'] as VPAToolName[],
+    restrictedTools: ['vpa_bookkeeping', 'vpa_time_billing'] as any[],
   },
   {
     personaId: 'cto',
@@ -308,7 +308,7 @@ export const PERSONA_TOOL_REGISTRY: PersonaToolAccess[] = [
       'vpa_time_billing',
       'vpa_email',
       'vpa_content',
-    ] as VPAToolName[],
+    ] as any[],
   },
 ];
 

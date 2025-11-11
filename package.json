@@ -1,0 +1,45 @@
+{
+  "name": "online-c-suite",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Hosted multi-tenant AI board of directors platform",
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "scripts": {
+  "dev": "pnpm --parallel --filter \"./apps/*\" dev",
+  "dev:web": "pnpm --filter web dev",
+  "dev:api": "pnpm --filter api dev",
+  "dev:workers": "pnpm --filter api dev:workers",
+  "build": "pnpm --recursive --filter \"./packages/*\" build && pnpm --filter \"./apps/*\" build",
+  "build:packages": "pnpm --recursive --filter \"./packages/*\" build",
+  "build:apps": "pnpm --filter \"./apps/*\" build",
+    "lint": "pnpm --recursive lint",
+    "lint:fix": "pnpm --recursive --sequential exec -- eslint --fix .",
+    "test": "pnpm --recursive test",
+    "test:watch": "pnpm --recursive test:watch",
+    "test:coverage": "pnpm --recursive test:coverage",
+    "test:integration": "pnpm --filter api test",
+    "typecheck": "pnpm --recursive typecheck",
+    "clean": "pnpm --recursive clean && rm -rf node_modules",
+    "db:generate": "pnpm --filter @ocsuite/db generate",
+    "db:migrate": "pnpm --filter @ocsuite/db migrate",
+    "db:migrate:dev": "pnpm --filter @ocsuite/db migrate:dev",
+    "db:push": "pnpm --filter @ocsuite/db push",
+    "db:studio": "pnpm --filter @ocsuite/db studio",
+    "db:reset": "pnpm --filter @ocsuite/db reset",
+  "seed:slice4": "pnpm --filter @ocsuite/db seed:slice4",
+  "seed:slice5": "pnpm --filter @ocsuite/db seed:slice5",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\"",
+    "prepare": "node -e \"try{require('husky').install();}catch(e){process.exit(0);}\""
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.3",
+    "prettier": "^3.1.1",
+    "husky": "^9.0.11"
+  },
+  "packageManager": "pnpm@8.12.0"
+}

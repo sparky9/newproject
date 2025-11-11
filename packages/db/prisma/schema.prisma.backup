@@ -1,0 +1,862 @@
+// Prisma Schema for @ocsuite/db
+// Multi-tenant architecture with Row-Level Security (RLS) enforcement
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pgvector(schema: "public", map: "vector")]
+}
+
+// ============================================================================
+// CORE TENANT MODEL
+// ============================================================================
+
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  members            TenantMember[]
+  conversations      Conversation[]
+  messages           Message[]
+  connectors         Connector[]
+  tasks              Task[]
+  usageSnapshots     UsageSnapshot[]
+  knowledgeEntries   KnowledgeEntry[]
+  knowledgeSources   KnowledgeSource[]
+  knowledgeAuditEvents KnowledgeAuditEvent[]
+  businessProfile    BusinessProfile?
+  boardMeetings  BoardMeeting[]
+  boardPersonaTurns BoardPersonaTurn[]
+  boardActionItems BoardActionItem[]
+  actionApprovals ActionApproval[]
+  notifications Notification[]
+  notificationPreferences NotificationPreference[]
+  moduleInsights     ModuleInsight[]
+  analyticsSnapshots AnalyticsSnapshot[]
+  triggerRules TriggerRule[]
+  alerts Alert[]
+  tenantWidgets TenantWidget[]
+  billingUsage BillingUsage[]
+  videoJobs VideoJob[]
+  videoTranscripts VideoTranscript[]
+  accessLogs AccessLog[]
+
+  @@index([slug])
+  @@map("tenants")
+}
+
+// ============================================================================
+// USER & MEMBERSHIP MODELS
+// ============================================================================
+
+model User {
+  id        String   @id @default(cuid())
+  clerkId   String   @unique
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  tenantMemberships TenantMember[]
+  conversations     Conversation[]
+  tasks             Task[]
+  notifications     Notification[]
+  notificationPreferences NotificationPreference[]
+  accessLogs        AccessLog[]
+
+  @@index([clerkId])
+  @@index([email])
+  @@map("users")
+}
+
+model TenantMember {
+  id        String   @id @default(cuid())
+  tenantId  String
+  userId    String
+  role      TenantMemberRole
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignedBoardActionItems BoardActionItem[] @relation("BoardActionItemAssignee")
+
+  @@unique([tenantId, userId])
+  @@index([tenantId])
+  @@index([userId])
+  @@map("tenant_members")
+}
+
+enum TenantMemberRole {
+  owner
+  admin
+  member
+}
+
+// ============================================================================
+// CONVERSATION & MESSAGE MODELS
+// ============================================================================
+
+model Conversation {
+  id          String      @id @default(cuid())
+  tenantId    String
+  userId      String
+  personaType PersonaType
+  title       String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  // Relations
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([personaType])
+  @@index([createdAt])
+  @@map("conversations")
+}
+
+model Message {
+  id             String   @id @default(cuid())
+  conversationId String
+  tenantId       String
+  role           MessageRole
+  content        String   @db.Text
+  metadata       Json?
+  createdAt      DateTime @default(now())
+
+  // Relations
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([tenantId])
+  @@index([createdAt])
+  @@map("messages")
+}
+
+enum PersonaType {
+  ceo
+  cfo
+  cmo
+  cto
+}
+
+enum MessageRole {
+  user
+  assistant
+  system
+}
+
+// ============================================================================
+// CONNECTOR MODELS
+// ============================================================================
+
+model Connector {
+  id                     String            @id @default(cuid())
+  tenantId               String
+  provider               ConnectorProvider
+  status                 ConnectorStatus
+  encryptedAccessToken   String            @db.Text
+  encryptedRefreshToken  String?           @db.Text
+  encryptionKeyVersion   Int               @default(1) @map("encryption_key_version")
+  tokenExpiresAt         DateTime?
+  scopes                 String[]
+  metadata               Json?
+  lastSyncedAt           DateTime?
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  analyticsSnapshots AnalyticsSnapshot[]
+
+  @@unique([tenantId, provider])
+  @@index([tenantId])
+  @@index([provider])
+  @@index([status])
+  @@map("connectors")
+}
+
+enum ConnectorProvider {
+  google
+  gmail
+  slack
+  notion
+  stripe
+}
+
+enum ConnectorStatus {
+  active
+  error
+  disconnected
+  pending
+}
+
+// ============================================================================
+// TASK EXECUTION MODELS
+// ============================================================================
+
+model Task {
+  id         String       @id @default(cuid())
+  tenantId   String
+  userId     String
+  type       String
+  status     TaskStatus
+  priority   TaskPriority
+  payload    Json
+  result     Json?
+  error      String?      @db.Text
+  jobId       String?
+  queueName   String?
+  moduleSlug  String?      @map("module_slug")
+  connectorId String?      @map("connector_id")
+  boardActionItemId String? @unique @map("board_action_item_id")
+  actionApprovalId String?  @unique @map("action_approval_id")
+  executedAt DateTime?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  boardActionItem BoardActionItem? @relation("BoardActionItemTask", fields: [boardActionItemId], references: [id], onDelete: SetNull)
+  actionApproval ActionApproval? @relation("ActionApprovalTask", fields: [actionApprovalId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([status])
+  @@index([priority])
+  @@index([type])
+  @@index([jobId])
+  @@index([queueName])
+  @@index([moduleSlug])
+  @@index([connectorId])
+  @@index([boardActionItemId])
+  @@index([actionApprovalId])
+  @@index([createdAt])
+  @@map("tasks")
+}
+
+enum TaskStatus {
+  pending
+  running
+  completed
+  failed
+}
+
+enum TaskPriority {
+  low
+  normal
+  high
+  urgent
+}
+
+// ============================================================================
+// BOARD MEETING MODELS (PHASE 3)
+// ============================================================================
+
+model BoardMeeting {
+  id             String   @id @default(cuid())
+  tenantId       String   @map("tenant_id")
+  startedAt      DateTime @default(now()) @map("started_at")
+  endedAt        DateTime? @map("ended_at")
+  agenda         Json
+  agendaVersion  Int      @default(1) @map("agenda_version")
+  outcomeSummary String?  @map("outcome_summary")
+  tokenUsage     Json?    @map("token_usage")
+  rating         Int?
+  metadata       Json?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  tenant        Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  personaTurns  BoardPersonaTurn[]
+  actionItems   BoardActionItem[]
+
+  @@index([tenantId, createdAt])
+  @@map("board_meetings")
+}
+
+model BoardPersonaTurn {
+  id        String   @id @default(cuid())
+  meetingId String   @map("meeting_id")
+  tenantId  String   @map("tenant_id")
+  persona   String
+  role      PersonaType?
+  content   String   @db.Text
+  metrics   Json?
+  sequence  Int
+  streamedAt DateTime @map("streamed_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  meeting BoardMeeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  tenant  Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, meetingId])
+  @@index([meetingId, sequence])
+  @@map("board_persona_turns")
+}
+
+model BoardActionItem {
+  id          String            @id @default(cuid())
+  meetingId   String            @map("meeting_id")
+  tenantId    String            @map("tenant_id")
+  title       String
+  description String?           @db.Text
+  status      BoardActionStatus @default(open)
+  priority    TaskPriority      @default(normal)
+  assigneeId  String?           @map("assignee_id")
+  dueDate     DateTime?         @map("due_date")
+  metadata    Json?
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+
+  // Relations
+  meeting BoardMeeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  tenant  Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assignee TenantMember? @relation("BoardActionItemAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  task     Task? @relation("BoardActionItemTask")
+  actionApprovals ActionApproval[] @relation("BoardActionItemApproval")
+
+  @@index([tenantId, meetingId])
+  @@index([status])
+  @@index([assigneeId])
+  @@map("board_action_items")
+}
+
+enum BoardActionStatus {
+  open
+  in_progress
+  completed
+}
+
+// ============================================================================
+// ACTION APPROVAL & NOTIFICATION MODELS (PHASE 4)
+// ============================================================================
+
+model ActionApproval {
+  id            String                 @id @default(cuid())
+  tenantId      String                 @map("tenant_id")
+  actionItemId  String?                @map("action_item_id")
+  source        String
+  payload       Json
+  riskScore     Int                    @map("risk_score")
+  status        ActionApprovalStatus   @default(pending)
+  createdBy     String                 @map("created_by")
+  approvedBy    String?                @map("approved_by")
+  approvedAt    DateTime?              @map("approved_at")
+  executedAt    DateTime?              @map("executed_at")
+  auditLog      Json                   @map("audit_log")
+  createdAt     DateTime               @default(now()) @map("created_at")
+  updatedAt     DateTime               @updatedAt @map("updated_at")
+
+  // Relations
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  boardActionItem BoardActionItem? @relation("BoardActionItemApproval", fields: [actionItemId], references: [id], onDelete: SetNull)
+  task            Task?             @relation("ActionApprovalTask")
+
+  @@index([tenantId, status])
+  @@index([createdBy])
+  @@index([approvedBy])
+  @@map("action_approvals")
+}
+
+enum ActionApprovalStatus {
+  pending
+  approved
+  rejected
+  executing
+  executed
+  failed
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  tenantId  String   @map("tenant_id")
+  userId    String   @map("user_id")
+  type      String
+  payload   Json
+  channel   NotificationChannel @default(in_app)
+  alertId   String?  @map("alert_id")
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  alert  Alert?  @relation(fields: [alertId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, userId])
+  @@index([userId, readAt])
+  @@index([alertId])
+  @@map("notifications")
+}
+
+model AccessLog {
+  id          String   @id @default(cuid())
+  tenantId    String?
+  userId      String?
+  method      String
+  route       String
+  statusCode  Int
+  ip          String?
+  userAgent   String?
+  durationMs  Int?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("access_logs")
+}
+
+enum NotificationChannel {
+  in_app
+  email
+  slack_stub
+}
+
+model NotificationPreference {
+  id        String   @id @default(cuid())
+  tenantId  String   @map("tenant_id")
+  userId    String   @map("user_id")
+  channel   NotificationChannel
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId, channel], map: "notification_preferences_unique")
+  @@index([tenantId, userId], map: "notification_preferences_tenant_user_idx")
+  @@map("notification_preferences")
+}
+
+// ============================================================================
+// USAGE & METRICS MODELS
+// ============================================================================
+
+model UsageSnapshot {
+  id            String   @id @default(cuid())
+  tenantId      String
+  date          DateTime @db.Date
+  apiCalls      Int      @default(0)
+  tokensUsed    Int      @default(0)
+  tasksExecuted Int      @default(0)
+  storageBytes  BigInt   @default(0)
+  alertsTriggered Int    @default(0) @map("alerts_triggered")
+  activeWidgets Int      @default(0) @map("active_widgets")
+  summary       Json?    @map("summary_metrics")
+  createdAt     DateTime @default(now())
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, date])
+  @@index([tenantId])
+  @@index([date])
+  @@map("usage_snapshots")
+}
+
+// ============================================================================
+// KNOWLEDGE BASE MODELS
+// ============================================================================
+
+model KnowledgeEntry {
+  id        String                        @id @default(cuid())
+  tenantId  String?                       // null = company-wide knowledge
+  source    String
+  sourceId  String?
+  content   String                        @db.Text
+  encryptionKeyVersion Int                @default(1) @map("encryption_key_version")
+  embedding Unsupported("vector(1536)")?  // pgvector embedding
+  metadata  Json?
+  checksum  String?
+  chunkSize Int?                          @map("chunk_size")
+  tokenCount Int?                         @map("token_count")
+  embeddingMetadata Json?                 @map("embedding_metadata")
+  storageKey String?                      @map("storage_key")
+  retentionExpiresAt DateTime?            @map("retention_expires_at")
+  createdAt DateTime                      @default(now())
+  updatedAt DateTime                      @updatedAt
+
+  // Relations
+  tenant  Tenant?          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sourceRef KnowledgeSource? @relation("KnowledgeSourceEntries", fields: [sourceId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([source])
+  @@index([sourceId])
+  @@index([createdAt])
+  @@map("knowledge_entries")
+}
+
+model KnowledgeSource {
+  id               String                      @id @default(cuid())
+  tenantId         String?                     // null = company HQ
+  name             String
+  type             KnowledgeSourceType
+  provider         KnowledgeSourceProvider
+  status           KnowledgeSourceStatus       @default(pending)
+  storageStrategy  KnowledgeStorageStrategy    @default(managed_postgres) @map("storage_strategy")
+  retentionPolicy  KnowledgeRetentionPolicy    @default(retain_indefinitely) @map("retention_policy")
+  configuration    Json?
+  lastSyncedAt     DateTime?                   @map("last_synced_at")
+  lastError        String?                     @db.Text @map("last_error")
+  createdAt        DateTime                    @default(now()) @map("created_at")
+  updatedAt        DateTime                    @updatedAt @map("updated_at")
+
+  // Relations
+  tenant  Tenant?           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  entries KnowledgeEntry[]  @relation("KnowledgeSourceEntries")
+  auditEvents KnowledgeAuditEvent[] @relation("KnowledgeSourceAuditEvents")
+
+  @@index([tenantId])
+  @@index([status])
+  @@map("knowledge_sources")
+}
+
+enum KnowledgeSourceType {
+  file_upload
+  cloud_sync
+  manual_note
+  hq_share
+}
+
+enum KnowledgeSourceProvider {
+  upload
+  google_drive
+  notion
+  manual
+  hq
+  other
+}
+
+enum KnowledgeSourceStatus {
+  pending
+  syncing
+  ready
+  error
+  disabled
+}
+
+enum KnowledgeAuditEventType {
+  upload
+  delete
+  export
+}
+
+model KnowledgeAuditEvent {
+  id          String                   @id @default(cuid())
+  tenantId    String?                  @map("tenant_id")
+  sourceId    String?                  @map("source_id")
+  sourceName  String                   @map("source_name")
+  event       KnowledgeAuditEventType
+  actorId     String?                  @map("actor_id")
+  summary     String
+  entryCount  Int                      @default(0) @map("entry_count")
+  metadata    Json?
+  createdAt   DateTime                 @default(now()) @map("created_at")
+
+  // Relations
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  source KnowledgeSource? @relation("KnowledgeSourceAuditEvents", fields: [sourceId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
+  @@index([sourceId])
+  @@map("knowledge_audit_events")
+}
+
+enum KnowledgeStorageStrategy {
+  managed_postgres
+  external_s3
+}
+
+enum KnowledgeRetentionPolicy {
+  retain_indefinitely
+  rolling_90_days
+  manual_purge
+}
+
+// ============================================================================
+// BUSINESS PROFILE MODEL
+// ============================================================================
+
+model BusinessProfile {
+  id        String         @id @default(cuid())
+  tenantId  String         @unique
+  industry  String?
+  size      BusinessSize?
+  revenue   String?
+  stage     BusinessStage?
+  goals     String[]
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("business_profiles")
+}
+
+enum BusinessSize {
+  solo
+  small
+  medium
+  large
+}
+
+enum BusinessStage {
+  idea
+  startup
+  growth
+  mature
+}
+
+// ============================================================================
+// PHASE 2: MODULE INSIGHTS & ANALYTICS
+// ============================================================================
+
+model ModuleInsight {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  moduleSlug  String   @map("module_slug")  // e.g., "growth-pulse"
+  severity    String                         // "info", "warning", "critical"
+  summary     String                         // Brief summary text
+  highlights  String[]                       // Array of key highlights
+  actionItems Json     @map("action_items")  // Structured action recommendations
+  score       Float?                         // Optional numeric score (0-100)
+  metadata    Json?                          // Additional module-specific data
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, moduleSlug])
+  @@index([tenantId, createdAt])
+  @@index([severity])
+  @@map("module_insights")
+}
+
+model AnalyticsSnapshot {
+  id              String   @id @default(cuid())
+  tenantId        String   @map("tenant_id")
+  connectorId     String?  @map("connector_id")  // Link to connector that sourced this
+  date            DateTime                        // Date of snapshot
+  sessions        Int      @default(0)
+  users           Int      @default(0)
+  conversions     Int      @default(0)
+  revenue         Float    @default(0)
+  sourceBreakdown Json     @map("source_breakdown")  // Traffic sources, channels, etc.
+  metadata        Json?                              // Additional analytics data
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  connector Connector? @relation(fields: [connectorId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, date])  // One snapshot per tenant per day
+  @@index([tenantId, date])
+  @@index([connectorId])
+  @@map("analytics_snapshots")
+}
+
+// ============================================================================
+// TRIGGER ENGINE & ALERTING
+// ============================================================================
+
+enum TriggerRuleType {
+  schedule
+  metric_threshold
+  anomaly
+}
+
+enum TriggerSeverity {
+  info
+  warning
+  critical
+}
+
+enum AlertStatus {
+  pending
+  acknowledged
+  resolved
+  snoozed
+}
+
+model TriggerRule {
+  id              String          @id @default(cuid())
+  tenantId        String          @map("tenant_id")
+  name            String
+  type            TriggerRuleType
+  schedule        String?         @map("schedule_cron")
+  metric          String?         @map("metric_key")
+  threshold       Float?          @map("threshold_value")
+  windowDays      Int?            @map("window_days")
+  config          Json?           @map("config_json")
+  severity        TriggerSeverity @default(warning)
+  enabled         Boolean         @default(true)
+  lastRunAt       DateTime?       @map("last_run_at")
+  lastTriggeredAt DateTime?       @map("last_triggered_at")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  alerts Alert[]
+
+  @@index([tenantId, enabled])
+  @@map("trigger_rules")
+}
+
+model Alert {
+  id             String          @id @default(cuid())
+  tenantId       String          @map("tenant_id")
+  ruleId         String?         @map("rule_id")
+  type           TriggerRuleType?
+  severity       TriggerSeverity @default(warning)
+  title          String?
+  summary        String?
+  payload        Json?
+  status         AlertStatus     @default(pending)
+  acknowledgedAt DateTime?       @map("acknowledged_at")
+  acknowledgedBy String?         @map("acknowledged_by")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  rule   TriggerRule? @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+  notifications Notification[]
+
+  @@index([tenantId, status])
+  @@index([ruleId])
+  @@map("alerts")
+}
+
+// ============================================================================
+// MARKETPLACE & BILLING
+// ============================================================================
+
+model Widget {
+  slug                 String   @id
+  name                 String
+  description          String
+  category             String
+  requiredCapabilities String[] @default([]) @map("required_capabilities")
+  config               Json?
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  installs TenantWidget[]
+
+  @@map("widgets")
+}
+
+model TenantWidget {
+  id         String   @id @default(cuid())
+  tenantId   String   @map("tenant_id")
+  widgetSlug String   @map("widget_slug")
+  enabledAt  DateTime @default(now()) @map("enabled_at")
+  settings   Json?    @map("settings_json")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  widget Widget @relation(fields: [widgetSlug], references: [slug], onDelete: Cascade)
+
+  @@unique([tenantId, widgetSlug])
+  @@index([widgetSlug])
+  @@map("tenant_widgets")
+}
+
+model BillingUsage {
+  id             String   @id @default(cuid())
+  tenantId       String   @map("tenant_id")
+  date           DateTime @db.Date
+  tokensUsed     Int      @default(0) @map("tokens_used")
+  tasksExecuted  Int      @default(0) @map("tasks_executed")
+  alertsTriggered Int     @default(0) @map("alerts_triggered")
+  activeWidgets  Int      @default(0) @map("active_widgets")
+  metadata       Json?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, date])
+  @@index([tenantId])
+  @@map("billing_usage")
+}
+
+// ============================================================================
+// VIDEO PRODUCTION MODELS
+// ============================================================================
+
+model VideoJob {
+  id              String   @id @default(cuid())
+  tenantId        String   @map("tenant_id")
+  type            String   // "transcribe", "extract_clips", "render", etc.
+  status          String   // "pending", "processing", "completed", "failed"
+  inputUrl        String   @map("input_url")
+  outputUrls      Json?    @map("output_urls")
+  transcriptId    String?  @map("transcript_id")
+  compositionId   String?  @map("composition_id")
+  renderId        String?  @map("render_id")
+  metadata        Json?
+  error           String?  @db.Text
+  progress        Int      @default(0)
+  createdBy       String?  @map("created_by")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  completedAt     DateTime? @map("completed_at")
+
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
+  @@map("video_jobs")
+}
+
+model VideoTranscript {
+  id              String   @id @default(cuid())
+  tenantId        String   @map("tenant_id")
+  jobId           String   @map("job_id")
+  assemblyAiId    String   @map("assemblyai_id")
+  content         String   @db.Text
+  words           Json?    // Word-level timestamps
+  speakers        Json?    // Speaker identification
+  sentiment       Json?    // Sentiment analysis
+  viralMoments    Json?    @map("viral_moments") // Extracted highlights
+  metadata        Json?
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([jobId])
+  @@index([assemblyAiId])
+  @@map("video_transcripts")
+}

@@ -1,0 +1,53 @@
+{
+  "name": "@ocsuite/db",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Prisma database client with tenant isolation middleware and RLS policies",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "pnpm generate && tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist *.tsbuildinfo node_modules/.prisma",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo 'No linting configured yet'",
+    "generate": "prisma generate",
+    "migrate": "prisma migrate deploy",
+    "migrate:dev": "prisma migrate dev",
+    "migrate:create": "prisma migrate dev --create-only",
+    "push": "prisma db push",
+    "studio": "prisma studio",
+    "reset": "prisma migrate reset",
+    "seed:phase2": "tsx scripts/seed-phase2.ts",
+    "seed:slice3": "tsx scripts/seed-slice3.ts",
+  "seed:slice4": "tsx scripts/seed-slice4.ts",
+  "seed:slice5": "tsx scripts/seed-slice5.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@ocsuite/types": "workspace:*",
+    "@prisma/client": "^5.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@vitest/coverage-v8": "^1.1.0",
+    "dotenv": "^16.3.1",
+    "prisma": "^5.22.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.1.0"
+  },
+  "prisma": {
+    "schema": "prisma/schema.prisma"
+  }
+}
