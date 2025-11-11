@@ -1,0 +1,31 @@
+{
+  "name": "@vea/core",
+  "version": "0.1.0",
+  "description": "Virtual Executive Assistant - Core orchestration for C-suite personas with module access",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest",
+    "test:watch": "vitest --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "vea",
+    "csuite",
+    "ai-personas",
+    "mcp",
+    "orchestration"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.0.4"
+  }
+}
